@@ -52,7 +52,7 @@ def profile(request, username):
     template_name = 'blog/profile.html'
     user = get_object_or_404(User, username=username)
     post_list = Post.objects\
-        .select_related('category').select_related('author').filter(
+        .select_related('category', 'author').filter(
             ((Q(is_published=True) & Q(category__is_published=True)
              & Q(pub_date__lte=timezone.now()))
              | Q(author__username=request.user.username)) &
@@ -84,7 +84,7 @@ def delete_post(request, pk):
     return render(request, template_name, context)
 
 
-@login_required
+@login_required  # Доступ только авторизованным пользователям
 def edit_profile(request):
     template_name = 'blog/user.html'
     form = ProfileForm(request.POST or None, instance=request.user)
@@ -124,21 +124,20 @@ def add_comment(request, pk, comment_pk=None):
         instance = get_object_or_404(Comment, pk=comment_pk)
         if request.user != instance.author:
             return redirect('blog:post_detail', pk=pk)
-    # Если в запросе не указан pk
+    # Если в запросе не указан pk комментария
     # (если получен запрос к странице создания записи):
     else:
         # Связывать форму с объектом не нужно, установим значение None.
         instance = None
-    # Получаем объект дня рождения или выбрасываем 404 ошибку.
+    # Получаем объект поста или выбрасываем 404 ошибку.
     post = get_object_or_404(Post, pk=pk)
-    # Функция должна обрабатывать только POST-запросы.
     form = CommentForm(request.POST or None, instance=instance)
     if form.is_valid():
-        # Создаём объект поздравления, но не сохраняем его в БД.
+        # Создаём объект комментария, но не сохраняем его в БД.
         comment = form.save(commit=False)
-        # В поле author передаём объект автора поздравления.
+        # В поле author передаём объект автора комментария.
         comment.author = request.user
-        # В поле birthday передаём объект дня рождения.
+        # В поле post передаём объект поста.
         comment.post = post
         post.comment_count += 1
         post.save()
@@ -148,7 +147,7 @@ def add_comment(request, pk, comment_pk=None):
         template_name = 'blog/comment.html'
         context = {'form': form, 'comment': instance}
         return render(request, template_name, context)
-    # Перенаправляем пользователя назад, на страницу дня рождения.
+    # Перенаправляем пользователя назад, на страницу поста.
     return redirect('blog:post_detail', pk=pk)
 
 
@@ -164,17 +163,16 @@ def create_post(request, pk=None):
     else:
         # Связывать форму с объектом не нужно, установим значение None.
         instance = None
-    # Функция должна обрабатывать только POST-запросы.
     form = PostForm(request.POST or None,
                     files=request.FILES or None, instance=instance)
     if form.is_valid():
-        # Создаём объект поздравления, но не сохраняем его в БД.
+        # Создаём объект поста, но не сохраняем его в БД.
         post = form.save(commit=False)
-        # В поле author передаём объект автора поздравления.
+        # В поле author передаём объект автора поста.
         post.author = request.user
         # Сохраняем объект в БД.
         post.save()
-        # Перенаправляем пользователя назад, на страницу дня рождения.
+        # Перенаправляем пользователя назад, на страницу поста.
         if pk is not None:
             return redirect('blog:post_detail', pk=pk)
         return redirect('blog:profile', username=request.user.username)
