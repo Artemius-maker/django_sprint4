@@ -1,32 +1,26 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
-from django.core.paginator import Paginator
 from django.views.generic import ListView
-from django.db.models import Q
 from .models import Post, Category, User, Comment
 from .forms import CommentForm, PostForm, ProfileForm
-from django.utils import timezone
+from core.views import count_comments, page_paginator, is_published
 
 
 class HomepageView(ListView):
+    page_paginator()
     model = Post
     template_name = 'blog/index.html'
     paginate_by = 10
 
     def get_queryset(self):
-        return self.model.objects.select_related('category').filter(
-            pub_date__lte=timezone.now(),
-            is_published__exact=True,
-            category__is_published=True
-        )
+        return count_comments(is_published(self.model.objects.
+                                           select_related('category')))
 
 
 def post_detail(request, pk):
     template_name = 'blog/detail.html'
-    post = get_object_or_404(Post.objects.select_related('category').filter(
-        (Q(is_published=True) & Q(category__is_published=True) &
-         Q(pub_date__lte=timezone.now())
-         | Q(author__username=request.user.username)) & Q(pk=pk)))
+    post = get_object_or_404(is_published(Post.objects.select_related(
+        'category'), request.user.username, True).filter(pk=pk))
     comments = Comment.objects.filter(post=post)
     form = CommentForm()
     context = {'post': post, 'form': form, 'comments': comments}
@@ -37,13 +31,9 @@ def category_posts(request, category_slug):
     template_name = 'blog/category.html'
     category = get_object_or_404(Category.objects.filter(
         is_published__exact=True), slug=category_slug)
-    post_list = Post.objects\
-        .select_related('category').filter(category__slug=category_slug,
-                                           pub_date__lte=timezone.now(),
-                                           is_published__exact=True)
-    paginator = Paginator(post_list, 10)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    post_list = count_comments(is_published(Post.objects
+                                            .select_related('category')))
+    page_obj = page_paginator(request, post_list)
     context = {'category': category, 'page_obj': page_obj}
     return render(request, template_name, context)
 
@@ -51,15 +41,12 @@ def category_posts(request, category_slug):
 def profile(request, username):
     template_name = 'blog/profile.html'
     user = get_object_or_404(User, username=username)
-    post_list = Post.objects\
-        .select_related('category', 'author').filter(
-            ((Q(is_published=True) & Q(category__is_published=True)
-             & Q(pub_date__lte=timezone.now()))
-             | Q(author__username=request.user.username)) &
-            Q(author__username=username))
-    paginator = Paginator(post_list, 10)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    post_list = count_comments(
+        is_published(Post.objects
+                     .select_related('category', 'author'),
+                     request.user.username, True)
+        .filter(author__username=username))
+    page_obj = page_paginator(request, post_list)
     context = {'profile': user, 'page_obj': page_obj}
     return render(request, template_name, context)
 
@@ -118,7 +105,7 @@ def delete_comment(request, pk, comment_pk):
 
 
 @login_required
-def add_comment(request, pk, comment_pk=None):
+def add_edit_comment(request, pk, comment_pk=None):
     if comment_pk is not None:
         # Получаем объект модели или выбрасываем 404 ошибку.
         instance = get_object_or_404(Comment, pk=comment_pk)
@@ -152,7 +139,7 @@ def add_comment(request, pk, comment_pk=None):
 
 
 @login_required
-def create_post(request, pk=None):
+def create_edit_post(request, pk=None):
     if pk is not None:
         # Получаем объект модели или выбрасываем 404 ошибку.
         instance = get_object_or_404(Post, pk=pk)

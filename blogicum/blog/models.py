@@ -1,16 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
-
-
-class BaseModel(models.Model):
-    created_at = models.DateTimeField(
-        auto_now_add=True, verbose_name="Добавлено")
-    is_published = models.BooleanField(
-        default=True, verbose_name="Опубликовано",
-        help_text="Снимите галочку, чтобы скрыть публикацию.")
-
-    class Meta:
-        abstract = True
+from core.models import BaseModel
 
 
 # Create your models here.
@@ -39,6 +29,7 @@ class Location(BaseModel):
     class Meta:
         verbose_name = "местоположение"
         verbose_name_plural = "Местоположения"
+        ordering = ['title']
 
     def __str__(self):
         return self.name
@@ -52,18 +43,18 @@ class Post(BaseModel):
                                     + "в будущем — можно делать "
                                     + "отложенные публикации.")
     author = models.ForeignKey(
-        User, on_delete=models.CASCADE, verbose_name="Автор публикации")
+        User, on_delete=models.CASCADE, verbose_name="Автор публикации",
+        related_name='author')
     location = models.ForeignKey(
         Location, on_delete=models.SET_NULL,
-        null=True, blank=True, verbose_name="Местоположение")
+        null=True, blank=True, verbose_name="Местоположение",
+        related_name='location')
     category = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
-        null=True, verbose_name="Категория")
+        null=True, verbose_name="Категория", related_name='category')
     image = models.ImageField(
         verbose_name="Фото", upload_to='images/', blank=True)
-    comment_count = models.IntegerField(
-        default=0, verbose_name="Кол-во комментариев")
 
     class Meta:
         verbose_name = "публикация"
@@ -82,7 +73,8 @@ class Comment(models.Model):
         related_name='comments',
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    author = models.ForeignKey(User, on_delete=models.CASCADE)
+    author = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='author')
 
     class Meta:
         verbose_name = "комментарий"
